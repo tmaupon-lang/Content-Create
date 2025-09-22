@@ -44,77 +44,55 @@ const App: React.FC = () => {
                     'কথোপকথন শুরু করার মতো প্রশ্ন'
                 ];
 
-                setLoadingMessage('আপনার জন্য পোস্টের লেখা তৈরি করা হচ্ছে...');
+                const allGeneratedContent: GeneratedContent[] = [];
+                const successfulPostsForImageGen: SocialPost[] = [];
 
-                const textGenerationPromises = postTypes.map(type => 
-                    generateSingleSocialPost(productName, type)
-                );
-
-                const textResults = await Promise.allSettled(textGenerationPromises);
-
-                const initialContent: GeneratedContent[] = [];
-                const successfulPosts: { post: SocialPost, index: number }[] = [];
-
-                textResults.forEach((result, index) => {
-                    if (result.status === 'fulfilled') {
-                        const post = result.value;
-                        const contentIndex = initialContent.length;
-                        initialContent.push({
+                for (const type of postTypes) {
+                    setLoadingMessage(`'${type}' পোস্টের লেখা তৈরি করা হচ্ছে...`);
+                    try {
+                        const post = await generateSingleSocialPost(productName, type);
+                        const newContent: GeneratedContent = {
                             ...post,
                             imageUrl: PLACEHOLDER_IMAGE_URL
-                        });
-                        successfulPosts.push({ post, index: contentIndex });
-                    } else {
-                        console.error(`Failed to generate post of type: ${postTypes[index]}`, result.reason);
-                        initialContent.push({
-                            type: `${postTypes[index]} (ব্যর্থ)`,
-                            text: `দুঃখিত, এই পোস্টটি তৈরি করা যায় নি। অনুগ্রহ করে আবার চেষ্টা করুন।\nত্রুটি: ${result.reason instanceof Error ? result.reason.message : 'অজানা সমস্যা'}`,
+                        };
+                        allGeneratedContent.push(newContent);
+                        successfulPostsForImageGen.push(post);
+                    } catch (reason) {
+                        console.error(`Failed to generate post of type: ${type}`, reason);
+                        const errorContent: GeneratedContent = {
+                            type: `${type} (ব্যর্থ)`,
+                            text: `দুঃখিত, এই পোস্টটি তৈরি করা যায় নি। অনুগ্রহ করে আবার চেষ্টা করুন।\nত্রুটি: ${reason instanceof Error ? reason.message : 'অজানা সমস্যা'}`,
                             image_prompt: '',
                             imageUrl: PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ত্রুটি')
-                        });
+                        };
+                        allGeneratedContent.push(errorContent);
                     }
-                });
-
-                setGeneratedContent(initialContent);
-                setLoadingMessage('পোস্টের জন্য ছবি তৈরি করা হচ্ছে...');
-
-                if (successfulPosts.length === 0) {
-                    setIsLoading(false);
-                    if(initialContent.length > 0) {
-                       setLoadingMessage('পোস্ট তৈরি করা যায় নি।');
-                       setTimeout(() => setLoadingMessage(''), 2000);
-                    }
-                    return;
+                    setGeneratedContent([...allGeneratedContent]);
                 }
-                
-                const imageGenerationPromises = successfulPosts.map(({ post, index }) => {
-                    return generatePostImage(post.image_prompt, post.type, aspectRatio)
-                        .then(imageResult => {
-                            setGeneratedContent(prevContent => {
-                                const newContent = [...prevContent];
-                                if (newContent[index]) {
-                                    newContent[index].imageUrl = imageResult
-                                        ? `data:image/jpeg;base64,${imageResult}`
-                                        : PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি');
-                                }
-                                return newContent;
-                            });
-                        })
-                        .catch(err => {
-                            console.error(`Error generating image for post index ${index}:`, err);
-                            setGeneratedContent(prevContent => {
-                                const newContent = [...prevContent];
-                                if (newContent[index]) {
-                                    newContent[index].imageUrl = PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি');
-                                }
-                                return newContent;
-                            });
-                        });
-                });
 
-                await Promise.all(imageGenerationPromises);
-                setLoadingMessage('সব পোস্ট তৈরি হয়ে গেছে!');
-
+                if (successfulPostsForImageGen.length > 0) {
+                    setLoadingMessage('পোস্টের জন্য ছবি তৈরি করা হচ্ছে...');
+                    
+                    const imageGenerationPromises = successfulPostsForImageGen.map(post => {
+                        return generatePostImage(post.image_prompt, post.type, aspectRatio)
+                            .then(imageResult => {
+                                setGeneratedContent(prevContent => prevContent.map(p => 
+                                    (p.text === post.text && p.type === post.type)
+                                        ? { ...p, imageUrl: imageResult ? `data:image/jpeg;base64,${imageResult}` : PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি') }
+                                        : p
+                                ));
+                            })
+                            .catch(err => {
+                                console.error(`Error generating image for post "${post.type}":`, err);
+                                setGeneratedContent(prevContent => prevContent.map(p => 
+                                    (p.text === post.text && p.type === post.type)
+                                        ? { ...p, imageUrl: PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি') }
+                                        : p
+                                ));
+                            });
+                    });
+                    await Promise.all(imageGenerationPromises);
+                }
             } else { // mode === 'funnel'
                 setLoadingMessage('আপনার জন্য ৩-ধাপের কনটেন্ট ফানেল তৈরি করা হচ্ছে...');
                 const funnelSteps = await generateContentFunnel(productName);
@@ -126,7 +104,7 @@ const App: React.FC = () => {
             setError(errorMessage);
         } finally {
             setIsLoading(false);
-            setTimeout(() => setLoadingMessage(''), 2000);
+            setLoadingMessage('');
         }
     }, [productName, mode, aspectRatio]);
 
@@ -196,7 +174,7 @@ const App: React.FC = () => {
                             {isLoading ? 'জেনারেট হচ্ছে...' : 'জেনারেট করুন'}
                         </button>
                     </div>
-                     {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
+                     {error && <p className="text-red-500 mt-4 text-center font-semibold">{error}</p>}
                 </div>
 
                 {isLoading && (
@@ -206,7 +184,7 @@ const App: React.FC = () => {
                     </div>
                 )}
                 
-                {generatedContent.length > 0 && mode === 'posts' && (
+                {generatedContent.length > 0 && mode === 'posts' && !isLoading && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
                         {generatedContent.map((content, index) => (
                             <ResultCard key={index} content={content} />
@@ -214,7 +192,7 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {funnelContent && mode === 'funnel' && (
+                {funnelContent && mode === 'funnel' && !isLoading && (
                      <div className="mt-12 max-w-4xl mx-auto">
                         <FunnelResult steps={funnelContent} />
                     </div>

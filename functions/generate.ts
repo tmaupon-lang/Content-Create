@@ -58,7 +58,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
 
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
-        return createErrorResponse(500, 'API Key is not configured on the server.');
+        return createErrorResponse(500, 'পরিষেবাটি ব্যবহারের জন্য একটি API Key প্রয়োজন যা সার্ভারে সঠিকভাবে সেট করা নেই।');
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -181,11 +181,11 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         };
 
     } catch (error) {
-        let message = 'An unknown error occurred.';
+        let message = 'একটি অজানা সমস্যা হয়েছে।';
         if (error instanceof Error) {
            message = error.message;
            if (error.message.includes('API key not valid') || error.message.includes('400')) {
-               message = 'সার্ভারে কনফিগার করা API Key সঠিক নয়।';
+               message = 'সার্ভারে কনফিগার করা API Key সঠিক নয়। অনুগ্রহ করে সার্ভার কনফিগারেশন পরীক্ষা করুন।';
            } else if (error.message.includes('429') || error.message.includes('RESOURCE_EXHAUSTED')) {
                message = 'API ব্যবহারের সীমা অতিক্রম করেছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।';
            } else if (error.message.includes('500') || error.message.includes('503') || error.message.includes('504')) {
