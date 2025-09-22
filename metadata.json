@@ -1,0 +1,5 @@
+{
+  "name": "Bangladeshi E-commerce Content Genie",
+  "description": "An AI-powered tool to generate social media posts and related images for Bangladeshi e-commerce products. Provide a product name to get various types of posts (informational, funny, sales) with hashtags and downloadable images, all in Bengali.",
+  "requestFramePermissions": []
+}
