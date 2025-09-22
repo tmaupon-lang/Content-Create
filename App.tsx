@@ -1,66 +1,20 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Header } from './components/Header';
 import { Loader } from './components/Loader';
 import { ResultCard } from './components/ResultCard';
 import { FunnelResult } from './components/FunnelResult';
-import { generateSocialPosts, generatePostImage, generateContentFunnel } from './services/geminiService';
+import { generateSingleSocialPost, generatePostImage, generateContentFunnel } from './services/geminiService';
 import type { SocialPost, GeneratedContent, FunnelStep } from './types';
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const PLACEHOLDER_IMAGE_URL = `data:image/svg+xml,${encodeURIComponent(`
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
     <rect width="512" height="512" fill="#F3F4F6"/>
     <path d="M416 128H96C78.3 128 64 142.3 64 160V352C64 369.7 78.3 384 96 384H416C433.7 384 448 369.7 448 352V160C448 142.3 433.7 128 416 128ZM224 256C224 242.7 234.7 232 248 232C261.3 232 272 242.7 272 256C272 269.3 261.3 280 248 280C234.7 280 224 269.3 224 256ZM416 352H96V259.9L156.4 208.7C160.1 205.4 165.6 205.1 169.6 208.1L224 248L300.9 191.1C305.1 187.5 311.2 187.8 315.1 191.8L416 292.7V352Z" fill="#CBD5E1"/>
-    <text x="50%" y="75%" dominant-baseline="middle" text-anchor="middle" font-family="Hind Siliguri, sans-serif" font-size="28" fill="#9CA3AF" font-weight="500">ছবি তৈরি করা যায় নি</text>
+    <text x="50%" y="75%" dominant-baseline="middle" text-anchor="middle" font-family="Hind Siliguri, sans-serif" font-size="28" fill="#9CA3AF" font-weight="500">ছবি তৈরি হচ্ছে...</text>
 </svg>
 `)}`;
 
-
-const ApiKeyModal: React.FC<{ onSave: (key: string) => void }> = ({ onSave }) => {
-    const [localApiKey, setLocalApiKey] = useState('');
-
-    const handleSaveClick = () => {
-        if (localApiKey.trim()) {
-            onSave(localApiKey.trim());
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-md w-full">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">API Key প্রয়োজন</h2>
-                <p className="text-gray-600 mb-6 text-center">
-                    এই অ্যাপটি ব্যবহার করার জন্য আপনার Google AI Studio API Key প্রয়োজন।
-                </p>
-                <input
-                    type="password"
-                    value={localApiKey}
-                    onChange={(e) => setLocalApiKey(e.target.value)}
-                    placeholder="আপনার API Key লিখুন"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-300 mb-4"
-                />
-                <button
-                    onClick={handleSaveClick}
-                    disabled={!localApiKey.trim()}
-                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold px-8 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    সেভ করুন ও শুরু করুন
-                </button>
-                 <p className="text-xs text-gray-500 mt-4 text-center">
-                    আপনার API Key আপনার ব্রাউজারে স্থানীয়ভাবে সংরক্ষিত থাকবে।
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline ml-1 font-medium">
-                        এখান থেকে কী নিন
-                    </a>
-                </p>
-            </div>
-        </div>
-    );
-};
-
-
 const App: React.FC = () => {
-    const [apiKey, setApiKey] = useState<string | null>(null);
     const [mode, setMode] = useState<'posts' | 'funnel'>('posts');
     const [productName, setProductName] = useState<string>('');
     const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16'>('1:1');
@@ -70,32 +24,9 @@ const App: React.FC = () => {
     const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
     const [funnelContent, setFunnelContent] = useState<FunnelStep[] | null>(null);
 
-
-     useEffect(() => {
-        const savedKey = localStorage.getItem('gemini-api-key');
-        if (savedKey) {
-            setApiKey(savedKey);
-        }
-    }, []);
-
-    const handleSaveKey = (key: string) => {
-        localStorage.setItem('gemini-api-key', key);
-        setApiKey(key);
-    };
-
-    const handleClearKey = () => {
-        localStorage.removeItem('gemini-api-key');
-        setApiKey(null);
-    };
-
-
     const handleGenerate = useCallback(async () => {
         if (!productName.trim()) {
             setError('অনুগ্রহ করে পণ্যের নাম লিখুন।');
-            return;
-        }
-        if (!apiKey) {
-            setError('API Key পাওয়া যায়নি। অনুগ্রহ করে আপনার কী সেট করুন।');
             return;
         }
 
@@ -106,57 +37,102 @@ const App: React.FC = () => {
 
         try {
             if (mode === 'posts') {
-                setLoadingMessage('আপনার জন্য বিভিন্ন ধরণের পোস্ট তৈরি করা হচ্ছে...');
-                const posts: SocialPost[] = await generateSocialPosts(productName, apiKey);
-                
-                // Add an initial delay to space out the text generation from the first image generation.
-                if (posts.length > 0) {
-                    setLoadingMessage(`API ব্যবহারের সীমা ঠিক রাখতে প্রথম ছবি তৈরির আগে ৬০ সেকেন্ড অপেক্ষা করা হচ্ছে...`);
-                    await sleep(60000);
-                }
+                const postTypes = [
+                    'তথ্যমূলক ও আবেগঘন',
+                    'মজার / ভাইরাল মিম',
+                    'আর্জেন্ট সেল পোস্ট',
+                    'কথোপকথন শুরু করার মতো প্রশ্ন'
+                ];
 
-                const finalContent: GeneratedContent[] = [];
-                for (let i = 0; i < posts.length; i++) {
-                    const post = posts[i];
-                    setLoadingMessage(`পোস্ট ${i + 1}/${posts.length}-এর জন্য ছবি তৈরি করা হচ্ছে...`);
-                    const imageBase64 = await generatePostImage(post.image_prompt, post.type, apiKey, aspectRatio);
-                    
-                    finalContent.push({
-                        ...post,
-                        imageUrl: imageBase64
-                            ? `data:image/jpeg;base64,${imageBase64}`
-                            : PLACEHOLDER_IMAGE_URL
-                    });
+                setLoadingMessage('আপনার জন্য পোস্টের লেখা তৈরি করা হচ্ছে...');
 
-                    if (i < posts.length - 1) {
-                        setLoadingMessage(`API ব্যবহারের সীমা ঠিক রাখতে পরবর্তী ছবির জন্য ৬০ সেকেন্ড অপেক্ষা করা হচ্ছে...`);
-                        await sleep(60000); 
+                const textGenerationPromises = postTypes.map(type => 
+                    generateSingleSocialPost(productName, type)
+                );
+
+                const textResults = await Promise.allSettled(textGenerationPromises);
+
+                const initialContent: GeneratedContent[] = [];
+                const successfulPosts: { post: SocialPost, index: number }[] = [];
+
+                textResults.forEach((result, index) => {
+                    if (result.status === 'fulfilled') {
+                        const post = result.value;
+                        const contentIndex = initialContent.length;
+                        initialContent.push({
+                            ...post,
+                            imageUrl: PLACEHOLDER_IMAGE_URL
+                        });
+                        successfulPosts.push({ post, index: contentIndex });
+                    } else {
+                        console.error(`Failed to generate post of type: ${postTypes[index]}`, result.reason);
+                        initialContent.push({
+                            type: `${postTypes[index]} (ব্যর্থ)`,
+                            text: `দুঃখিত, এই পোস্টটি তৈরি করা যায় নি। অনুগ্রহ করে আবার চেষ্টা করুন।\nত্রুটি: ${result.reason instanceof Error ? result.reason.message : 'অজানা সমস্যা'}`,
+                            image_prompt: '',
+                            imageUrl: PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ত্রুটি')
+                        });
                     }
+                });
+
+                setGeneratedContent(initialContent);
+                setLoadingMessage('পোস্টের জন্য ছবি তৈরি করা হচ্ছে...');
+
+                if (successfulPosts.length === 0) {
+                    setIsLoading(false);
+                    if(initialContent.length > 0) {
+                       setLoadingMessage('পোস্ট তৈরি করা যায় নি।');
+                       setTimeout(() => setLoadingMessage(''), 2000);
+                    }
+                    return;
                 }
-                setGeneratedContent(finalContent);
+                
+                const imageGenerationPromises = successfulPosts.map(({ post, index }) => {
+                    return generatePostImage(post.image_prompt, post.type, aspectRatio)
+                        .then(imageResult => {
+                            setGeneratedContent(prevContent => {
+                                const newContent = [...prevContent];
+                                if (newContent[index]) {
+                                    newContent[index].imageUrl = imageResult
+                                        ? `data:image/jpeg;base64,${imageResult}`
+                                        : PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি');
+                                }
+                                return newContent;
+                            });
+                        })
+                        .catch(err => {
+                            console.error(`Error generating image for post index ${index}:`, err);
+                            setGeneratedContent(prevContent => {
+                                const newContent = [...prevContent];
+                                if (newContent[index]) {
+                                    newContent[index].imageUrl = PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি');
+                                }
+                                return newContent;
+                            });
+                        });
+                });
+
+                await Promise.all(imageGenerationPromises);
+                setLoadingMessage('সব পোস্ট তৈরি হয়ে গেছে!');
+
             } else { // mode === 'funnel'
                 setLoadingMessage('আপনার জন্য ৩-ধাপের কনটেন্ট ফানেল তৈরি করা হচ্ছে...');
-                const funnelSteps = await generateContentFunnel(productName, apiKey);
+                const funnelSteps = await generateContentFunnel(productName);
                 setFunnelContent(funnelSteps);
             }
-
         } catch (err) {
             console.error(err);
             const errorMessage = err instanceof Error ? err.message : 'কিছু একটা সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।';
             setError(errorMessage);
         } finally {
             setIsLoading(false);
-            setLoadingMessage('');
+            setTimeout(() => setLoadingMessage(''), 2000);
         }
-    }, [productName, apiKey, mode, aspectRatio]);
-
-    if (!apiKey) {
-        return <ApiKeyModal onSave={handleSaveKey} />;
-    }
+    }, [productName, mode, aspectRatio]);
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-800">
-            <Header onClearKey={handleClearKey} />
+            <Header />
             <main className="container mx-auto px-4 py-8">
                 <div className="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
                     <h2 className="text-2xl sm:text-3xl font-bold text-gray-700 mb-2 text-center">আপনার পণ্যের জন্য কনটেন্ট বানান</h2>
@@ -202,7 +178,6 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
-
 
                     <div className="flex flex-col sm:flex-row gap-3">
                         <input
