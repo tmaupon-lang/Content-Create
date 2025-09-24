@@ -1,208 +1,86 @@
-import React, { useState, useCallback } from 'react';
-import { Header } from './components/Header';
-import { Loader } from './components/Loader';
-import { ResultCard } from './components/ResultCard';
-import { FunnelResult } from './components/FunnelResult';
-import { generateSingleSocialPost, generatePostImage, generateContentFunnel } from './services/geminiService';
-import type { SocialPost, GeneratedContent, FunnelStep } from './types';
-
-const PLACEHOLDER_IMAGE_URL = `data:image/svg+xml,${encodeURIComponent(`
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="512" height="512" fill="#F3F4F6"/>
-    <path d="M416 128H96C78.3 128 64 142.3 64 160V352C64 369.7 78.3 384 96 384H416C433.7 384 448 369.7 448 352V160C448 142.3 433.7 128 416 128ZM224 256C224 242.7 234.7 232 248 232C261.3 232 272 242.7 272 256C272 269.3 261.3 280 248 280C234.7 280 224 269.3 224 256ZM416 352H96V259.9L156.4 208.7C160.1 205.4 165.6 205.1 169.6 208.1L224 248L300.9 191.1C305.1 187.5 311.2 187.8 315.1 191.8L416 292.7V352Z" fill="#CBD5E1"/>
-    <text x="50%" y="75%" dominant-baseline="middle" text-anchor="middle" font-family="Hind Siliguri, sans-serif" font-size="28" fill="#9CA3AF" font-weight="500">ছবি তৈরি হচ্ছে...</text>
-</svg>
-`)}`;
+import React, { useState, useEffect, useCallback } from 'react';
+import Header from './components/Header';
+import Home from './components/Home';
+import type { FullSchedule, Post } from './types';
+import { INITIAL_SCHEDULE, TIME_SLOTS } from './constants';
+import { generatePostAndImage } from './services/geminiService';
 
 const App: React.FC = () => {
-    const [mode, setMode] = useState<'posts' | 'funnel'>('posts');
-    const [productName, setProductName] = useState<string>('');
-    const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16'>('1:1');
-    const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [loadingMessage, setLoadingMessage] = useState<string>('');
-    const [error, setError] = useState<string | null>(null);
-    const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
-    const [funnelContent, setFunnelContent] = useState<FunnelStep[] | null>(null);
+  // Fix: Removed page and apiKey state management to align with new single-page structure and API key guidelines.
+  const [schedule, setSchedule] = useState<FullSchedule>(INITIAL_SCHEDULE);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingStates, setLoadingStates] = useState<boolean[][]>(
+    Array(7).fill(Array(3).fill(false))
+  );
 
-    const handleGenerate = useCallback(async () => {
-        if (!productName.trim()) {
-            setError('অনুগ্রহ করে পণ্যের নাম লিখুন।');
-            return;
-        }
+  useEffect(() => {
+    // Fix: Removed API key loading from localStorage and navigation to settings.
+    const savedSchedule = localStorage.getItem('social_schedule');
+    if (savedSchedule) {
+      setSchedule(JSON.parse(savedSchedule));
+    }
+  }, []);
 
-        setIsLoading(true);
-        setError(null);
-        setGeneratedContent([]);
-        setFunnelContent(null);
+  const updatePost = useCallback((dayIndex: number, slotIndex: number, newPostData: Partial<Post>) => {
+    setSchedule(prevSchedule => {
+      const newSchedule = JSON.parse(JSON.stringify(prevSchedule));
+      newSchedule[dayIndex][slotIndex] = { ...newSchedule[dayIndex][slotIndex], ...newPostData };
+      localStorage.setItem('social_schedule', JSON.stringify(newSchedule));
+      return newSchedule;
+    });
+  }, []);
 
-        try {
-            if (mode === 'posts') {
-                const postTypes = [
-                    'তথ্যমূলক ও আবেগঘন',
-                    'মজার / ভাইরাল মিম',
-                    'আর্জেন্ট সেল পোস্ট',
-                    'কথোপকথন শুরু করার মতো প্রশ্ন'
-                ];
+  const setLoading = (dayIndex: number, slotIndex: number, isLoading: boolean) => {
+    setLoadingStates(prev => {
+      const newStates = prev.map(row => [...row]);
+      newStates[dayIndex][slotIndex] = isLoading;
+      return newStates;
+    });
+  };
 
-                const allGeneratedContent: GeneratedContent[] = [];
-                const successfulPostsForImageGen: SocialPost[] = [];
+  const generatePost = useCallback(async (prompt: string, dayIndex: number, slotIndex: number) => {
+    // Fix: Removed apiKey check and passing to service, as it's now handled via environment variables.
+    setError(null);
+    setLoading(dayIndex, slotIndex, true);
 
-                for (const type of postTypes) {
-                    setLoadingMessage(`'${type}' পোস্টের লেখা তৈরি করা হচ্ছে...`);
-                    try {
-                        const post = await generateSingleSocialPost(productName, type);
-                        const newContent: GeneratedContent = {
-                            ...post,
-                            imageUrl: PLACEHOLDER_IMAGE_URL
-                        };
-                        allGeneratedContent.push(newContent);
-                        successfulPostsForImageGen.push(post);
-                    } catch (reason) {
-                        console.error(`Failed to generate post of type: ${type}`, reason);
-                        const errorContent: GeneratedContent = {
-                            type: `${type} (ব্যর্থ)`,
-                            text: `দুঃখিত, এই পোস্টটি তৈরি করা যায় নি। অনুগ্রহ করে আবার চেষ্টা করুন।\nত্রুটি: ${reason instanceof Error ? reason.message : 'অজানা সমস্যা'}`,
-                            image_prompt: '',
-                            imageUrl: PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ত্রুটি')
-                        };
-                        allGeneratedContent.push(errorContent);
-                    }
-                    setGeneratedContent([...allGeneratedContent]);
-                }
+    try {
+      const timeSlot = TIME_SLOTS[slotIndex];
+      const result = await generatePostAndImage(prompt, timeSlot);
+      updatePost(dayIndex, slotIndex, {
+        generatedText: result.text,
+        generatedImage: result.imageUrl,
+      });
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "An unknown error occurred.");
+    } finally {
+      setLoading(dayIndex, slotIndex, false);
+    }
+  }, [updatePost]);
 
-                if (successfulPostsForImageGen.length > 0) {
-                    setLoadingMessage('পোস্টের জন্য ছবি তৈরি করা হচ্ছে...');
-                    
-                    const imageGenerationPromises = successfulPostsForImageGen.map(post => {
-                        return generatePostImage(post.image_prompt, post.type, aspectRatio)
-                            .then(imageResult => {
-                                setGeneratedContent(prevContent => prevContent.map(p => 
-                                    (p.text === post.text && p.type === post.type)
-                                        ? { ...p, imageUrl: imageResult ? `data:image/jpeg;base64,${imageResult}` : PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি') }
-                                        : p
-                                ));
-                            })
-                            .catch(err => {
-                                console.error(`Error generating image for post "${post.type}":`, err);
-                                setGeneratedContent(prevContent => prevContent.map(p => 
-                                    (p.text === post.text && p.type === post.type)
-                                        ? { ...p, imageUrl: PLACEHOLDER_IMAGE_URL.replace('ছবি তৈরি হচ্ছে...', 'ছবি তৈরি করা যায় নি') }
-                                        : p
-                                ));
-                            });
-                    });
-                    await Promise.all(imageGenerationPromises);
-                }
-            } else { // mode === 'funnel'
-                setLoadingMessage('আপনার জন্য ৩-ধাপের কনটেন্ট ফানেল তৈরি করা হচ্ছে...');
-                const funnelSteps = await generateContentFunnel(productName);
-                setFunnelContent(funnelSteps);
-            }
-        } catch (err) {
-            console.error(err);
-            const errorMessage = err instanceof Error ? err.message : 'কিছু একটা সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।';
-            setError(errorMessage);
-        } finally {
-            setIsLoading(false);
-            setLoadingMessage('');
-        }
-    }, [productName, mode, aspectRatio]);
 
-    return (
-        <div className="min-h-screen bg-gray-50 text-gray-800">
-            <Header />
-            <main className="container mx-auto px-4 py-8">
-                <div className="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-700 mb-2 text-center">আপনার পণ্যের জন্য কনটেন্ট বানান</h2>
-                    <p className="text-center text-gray-500 mb-6">আপনার প্রয়োজন অনুযায়ী সোশ্যাল মিডিয়া পোস্ট অথবা সম্পূর্ণ কনটেন্ট ফানেল তৈরি করুন।</p>
-                    
-                     <div className="flex justify-center gap-2 mb-6">
-                        <button
-                            onClick={() => setMode('posts')}
-                            disabled={isLoading}
-                            className={`px-6 py-2 font-semibold rounded-full transition-all duration-300 ${
-                                mode === 'posts' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            সোশ্যাল পোস্ট
-                        </button>
-                        <button
-                            onClick={() => setMode('funnel')}
-                            disabled={isLoading}
-                            className={`px-6 py-2 font-semibold rounded-full transition-all duration-300 ${
-                                mode === 'funnel' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            কনটেন্ট ফানেল
-                        </button>
-                    </div>
-
-                    {mode === 'posts' && (
-                        <div className="mb-6">
-                            <p className="text-center text-gray-600 font-medium mb-3">ছবির অনুপাত (Aspect Ratio):</p>
-                            <div className="flex justify-center gap-2">
-                                {(['1:1', '16:9', '9:16'] as const).map(ratio => (
-                                    <button
-                                        key={ratio}
-                                        onClick={() => setAspectRatio(ratio)}
-                                        disabled={isLoading}
-                                        className={`px-5 py-2 text-sm font-semibold rounded-full transition-all duration-300 ${
-                                            aspectRatio === ratio ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        }`}
-                                    >
-                                        {ratio}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <input
-                            type="text"
-                            value={productName}
-                            onChange={(e) => setProductName(e.target.value)}
-                            placeholder="যেমন: দেশি গরুর ঘি, জামদানি শাড়ি"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-300"
-                            disabled={isLoading}
-                        />
-                        <button
-                            onClick={handleGenerate}
-                            disabled={isLoading}
-                            className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold px-8 py-3 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 flex items-center justify-center gap-2"
-                        >
-                            {isLoading ? 'জেনারেট হচ্ছে...' : 'জেনারেট করুন'}
-                        </button>
-                    </div>
-                     {error && <p className="text-red-500 mt-4 text-center font-semibold">{error}</p>}
-                </div>
-
-                {isLoading && (
-                    <div className="text-center mt-12">
-                        <Loader />
-                        <p className="text-lg text-gray-600 mt-4 animate-pulse">{loadingMessage}</p>
-                    </div>
-                )}
-                
-                {generatedContent.length > 0 && mode === 'posts' && !isLoading && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-                        {generatedContent.map((content, index) => (
-                            <ResultCard key={index} content={content} />
-                        ))}
-                    </div>
-                )}
-
-                {funnelContent && mode === 'funnel' && !isLoading && (
-                     <div className="mt-12 max-w-4xl mx-auto">
-                        <FunnelResult steps={funnelContent} />
-                    </div>
-                )}
-            </main>
-            <footer className="text-center py-6 text-gray-500 text-sm">
-                <p>Powered by Gemini API</p>
-            </footer>
-        </div>
-    );
+  // Fix: Removed renderPage function and multi-page logic. The app now only displays the Home component.
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-100">
+      <Header />
+      <main>
+        {error && (
+          <div className="container mx-auto p-4">
+            <div className="bg-red-800 border border-red-600 text-white px-4 py-3 rounded relative" role="alert">
+              <strong className="font-bold">Error: </strong>
+              <span className="block sm:inline">{error}</span>
+            </div>
+          </div>
+        )}
+        <Home 
+          schedule={schedule} 
+          updatePost={updatePost} 
+          generatePost={generatePost}
+          loadingStates={loadingStates}
+        />
+      </main>
+    </div>
+  );
 };
 
 export default App;

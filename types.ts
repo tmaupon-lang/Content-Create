@@ -1,18 +1,12 @@
-
-export interface SocialPost {
-    type: string;
-    text: string;
-    image_prompt: string;
+export interface Post {
+  prompt: string;
+  isPromptSaved: boolean;
+  generatedText: string | null;
+  generatedImage: string | null; // Storing as base64 string
 }
 
-export interface GeneratedContent extends SocialPost {
-    imageUrl: string;
-}
+export type DayScheduleData = [Post, Post, Post];
 
-export interface FunnelStep {
-    stage: string;
-    headline: string;
-    content: string;
-    call_to_action: string;
-    visual_idea: string;
-}
+export type FullSchedule = DayScheduleData[];
+
+// Fix: Removed unused Page enum as the application is now single-page.

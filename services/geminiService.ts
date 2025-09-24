@@ -1,62 +1,46 @@
-import type { SocialPost, FunnelStep } from '../types';
+import { GoogleGenAI } from "@google/genai";
 
-const API_ENDPOINT = '/.netlify/functions/generate';
-
-async function callApi<T>(body: object): Promise<T> {
-    try {
-        const response = await fetch(API_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            let errorMessage = `সার্ভার থেকে একটি ত্রুটি এসেছে (${response.status} ${response.statusText})।`;
-            try {
-                const errorData = await response.json();
-                if (errorData.error) {
-                    errorMessage = errorData.error;
-                }
-            } catch (e) {
-                console.error("Could not parse error response as JSON.", e);
-            }
-            throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-        return data.result;
-
-    } catch (error) {
-         if (error instanceof Error) {
-            console.error("API Call Error:", error.message);
-            throw error;
-         }
-         throw new Error("একটি অজানা সমস্যা হয়েছে।");
-    }
+interface GenerationResult {
+  text: string;
+  imageUrl: string;
 }
 
-export const generateSingleSocialPost = async (productName: string, postType: string): Promise<SocialPost> => {
-    return callApi<SocialPost>({ 
-        task: 'generateSingleSocialPost', 
-        productName,
-        postType
-    });
-};
+export const generatePostAndImage = async (
+  prompt: string,
+  timeSlot: string
+): Promise<GenerationResult> => {
+  // Fix: Removed apiKey parameter and now using process.env.API_KEY directly as per guidelines.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const generateContentFunnel = async (productName: string): Promise<FunnelStep[]> => {
-    return callApi<FunnelStep[]>({ 
-        task: 'generateContentFunnel', 
-        productName 
-    });
-};
+  // Generate Text
+  const textPrompt = `Create a short, engaging, and professional social media post in the Bengali language based on the following topic: '${prompt}'. The tone should be positive and appealing to a general audience. The post must be only in Bengali. Do not add any English text. At the end, on new lines, add 3-5 relevant and trending Bengali hashtags suitable for a ${timeSlot} post. Just return the post content with the hashtags.`;
+  
+  const textResponse = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: textPrompt,
+  });
+  
+  const generatedText = textResponse.text.trim();
 
-export const generatePostImage = async (prompt: string, postType: string, aspectRatio: '1:1' | '16:9' | '9:16'): Promise<string | null> => {
-    return callApi<string | null>({
-        task: 'generatePostImage',
-        prompt,
-        postType,
-        aspectRatio
-    });
+  // Generate Image
+  const imagePrompt = `A vibrant and professional social media graphic for a post about: '${prompt}'. The image should be visually appealing, high quality, and suitable for platforms like Instagram or Facebook. Cinematic, photorealistic. If any text is included in the image, it must be in clear, legible Bengali with perfect spelling.`;
+  
+  const imageResponse = await ai.models.generateImages({
+    model: 'imagen-4.0-generate-001',
+    prompt: imagePrompt,
+    config: {
+      numberOfImages: 1,
+      outputMimeType: 'image/jpeg',
+      aspectRatio: '1:1',
+    },
+  });
+
+  if (!imageResponse.generatedImages || imageResponse.generatedImages.length === 0) {
+    throw new Error("Image generation failed.");
+  }
+
+  const base64ImageBytes = imageResponse.generatedImages[0].image.imageBytes;
+  const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+  
+  return { text: generatedText, imageUrl };
 };

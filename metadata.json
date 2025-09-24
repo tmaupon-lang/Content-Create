@@ -1,5 +1,5 @@
 {
-  "name": "Bangladeshi E-commerce Content Genie",
-  "description": "An AI-powered tool to generate social media posts and related images for Bangladeshi e-commerce products. Provide a product name to get various types of posts (informational, funny, sales) with hashtags and downloadable images, all in Bengali.",
+  "name": "Bangla Social Scheduler",
+  "description": "An AI-powered social media scheduler that generates posts and images in Bengali for a 7-day schedule based on user prompts.",
   "requestFramePermissions": []
 }
