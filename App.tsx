@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import Home from './components/Home';
@@ -75,11 +76,15 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      
       if (errorMessage.includes('API key not valid')) {
-         setError("Your API Key is not valid. Please check it in the Settings page.");
+         setError("আপনার API কী টি সঠিক নয়। অনুগ্রহ করে Settings পেজে গিয়ে সঠিক কী দিন। (Your API Key is not valid. Please check it in the Settings page.)");
          setPage(Page.Settings);
-      } else {
-        setError(errorMessage);
+      } else if (errorMessage.includes('Imagen API is only accessible to billed users')) {
+        setError("ছবি তৈরি করা সম্ভব হয়নি। Imagen API ব্যবহার করার জন্য আপনার Google Cloud প্রজেক্টে বিলিং চালু করতে হবে। (Image generation failed. The Imagen API requires a Google Cloud project with billing enabled.)");
+      }
+      else {
+        setError(`An error occurred: ${errorMessage}`);
       }
     } finally {
       setLoading(dayIndex, slotIndex, false);
