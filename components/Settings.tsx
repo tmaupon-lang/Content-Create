@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 
 interface SettingsProps {
@@ -21,6 +20,12 @@ const Settings: React.FC<SettingsProps> = ({ apiKey, setApiKey }) => {
     <div className="container mx-auto p-8 max-w-2xl">
       <div className="bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
         <h2 className="text-2xl font-bold text-white mb-4">Settings</h2>
+        
+        <div className="bg-yellow-900 border border-yellow-700 text-yellow-100 px-4 py-3 rounded-md relative mb-6" role="alert">
+          <strong className="font-bold">Security Warning:</strong>
+          <span className="block sm:inline"> Your API key is stored in your browser's local storage and is not secure. Do not use this on a public computer. This is for demonstration purposes only.</span>
+        </div>
+
         <div className="space-y-4">
           <div>
             <label htmlFor="api-key" className="block text-sm font-medium text-gray-300 mb-1">

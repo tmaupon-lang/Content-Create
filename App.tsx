@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import Home from './components/Home';
+import Settings from './components/Settings';
 import type { FullSchedule, Post } from './types';
+import { Page } from './types';
 import { INITIAL_SCHEDULE, TIME_SLOTS } from './constants';
 import { generatePostAndImage } from './services/geminiService';
 
 const App: React.FC = () => {
-  // Fix: Removed page and apiKey state management to align with new single-page structure and API key guidelines.
+  const [page, setPage] = useState<Page>(Page.Home);
+  const [apiKey, setApiKey] = useState<string>('');
   const [schedule, setSchedule] = useState<FullSchedule>(INITIAL_SCHEDULE);
   const [error, setError] = useState<string | null>(null);
   const [loadingStates, setLoadingStates] = useState<boolean[][]>(
@@ -14,12 +17,26 @@ const App: React.FC = () => {
   );
 
   useEffect(() => {
-    // Fix: Removed API key loading from localStorage and navigation to settings.
+    const savedApiKey = localStorage.getItem('gemini_api_key');
     const savedSchedule = localStorage.getItem('social_schedule');
     if (savedSchedule) {
       setSchedule(JSON.parse(savedSchedule));
     }
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+      setPage(Page.Home);
+    } else {
+      setPage(Page.Settings);
+    }
   }, []);
+
+  const handleSetApiKey = (newApiKey: string) => {
+    setApiKey(newApiKey);
+    // Navigate to home after setting key, assuming the user wants to start using the app.
+    if (page !== Page.Home) {
+      setPage(Page.Home);
+    }
+  };
 
   const updatePost = useCallback((dayIndex: number, slotIndex: number, newPostData: Partial<Post>) => {
     setSchedule(prevSchedule => {
@@ -39,45 +56,77 @@ const App: React.FC = () => {
   };
 
   const generatePost = useCallback(async (prompt: string, dayIndex: number, slotIndex: number) => {
-    // Fix: Removed apiKey check and passing to service, as it's now handled via environment variables.
+    if (!apiKey) {
+      setError("API Key is not set. Please add your Gemini API key in the Settings page to proceed.");
+      setPage(Page.Settings);
+      return;
+    }
+    
     setError(null);
     setLoading(dayIndex, slotIndex, true);
 
     try {
       const timeSlot = TIME_SLOTS[slotIndex];
-      const result = await generatePostAndImage(prompt, timeSlot);
+      const result = await generatePostAndImage(prompt, timeSlot, apiKey);
       updatePost(dayIndex, slotIndex, {
         generatedText: result.text,
         generatedImage: result.imageUrl,
       });
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "An unknown error occurred.");
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      if (errorMessage.includes('API key not valid')) {
+         setError("Your API Key is not valid. Please check it in the Settings page.");
+         setPage(Page.Settings);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(dayIndex, slotIndex, false);
     }
-  }, [updatePost]);
+  }, [updatePost, apiKey]);
+  
+  const renderPage = () => {
+    switch (page) {
+      case Page.Settings:
+        return <Settings apiKey={apiKey} setApiKey={handleSetApiKey} />;
+      case Page.Home:
+      default:
+        return (
+            <Home 
+              schedule={schedule} 
+              updatePost={updatePost} 
+              generatePost={generatePost}
+              loadingStates={loadingStates}
+            />
+        );
+    }
+  };
 
-
-  // Fix: Removed renderPage function and multi-page logic. The app now only displays the Home component.
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
-      <Header />
+      <Header page={page} setPage={setPage} />
       <main>
         {error && (
           <div className="container mx-auto p-4">
-            <div className="bg-red-800 border border-red-600 text-white px-4 py-3 rounded relative" role="alert">
+            <div className="bg-red-800 border border-red-600 text-white px-4 py-3 rounded-lg relative" role="alert">
               <strong className="font-bold">Error: </strong>
               <span className="block sm:inline">{error}</span>
+              <button onClick={() => setError(null)} className="absolute top-0 bottom-0 right-0 px-4 py-3" aria-label="Close">
+                <span className="text-2xl" aria-hidden="true">&times;</span>
+              </button>
             </div>
           </div>
         )}
-        <Home 
-          schedule={schedule} 
-          updatePost={updatePost} 
-          generatePost={generatePost}
-          loadingStates={loadingStates}
-        />
+        {page === Page.Home && !apiKey && (
+           <div className="container mx-auto p-4">
+            <div className="bg-blue-800 border border-blue-600 text-white px-4 py-3 rounded-lg relative" role="alert">
+              <strong className="font-bold">Welcome! </strong>
+              <span className="block sm:inline">Please go to the <button onClick={() => setPage(Page.Settings)} className="font-bold underline">Settings</button> page to enter your Gemini API key to start generating content.</span>
+            </div>
+          </div>
+        )}
+        {renderPage()}
       </main>
     </div>
   );

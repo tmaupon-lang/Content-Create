@@ -1,3 +1,8 @@
+export enum Page {
+  Home,
+  Settings,
+}
+
 export interface Post {
   prompt: string;
   isPromptSaved: boolean;
@@ -8,5 +13,3 @@ export interface Post {
 export type DayScheduleData = [Post, Post, Post];
 
 export type FullSchedule = DayScheduleData[];
-
-// Fix: Removed unused Page enum as the application is now single-page.

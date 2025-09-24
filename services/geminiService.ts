@@ -7,10 +7,10 @@ interface GenerationResult {
 
 export const generatePostAndImage = async (
   prompt: string,
-  timeSlot: string
+  timeSlot: string,
+  apiKey: string
 ): Promise<GenerationResult> => {
-  // Fix: Removed apiKey parameter and now using process.env.API_KEY directly as per guidelines.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   // Generate Text
   const textPrompt = `Create a short, engaging, and professional social media post in the Bengali language based on the following topic: '${prompt}'. The tone should be positive and appealing to a general audience. The post must be only in Bengali. Do not add any English text. At the end, on new lines, add 3-5 relevant and trending Bengali hashtags suitable for a ${timeSlot} post. Just return the post content with the hashtags.`;
